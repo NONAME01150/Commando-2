@@ -1,0 +1,223 @@
+#-------------------------------------------------------------------------------
+#Used to make RNG (0-255)
+[Function RNG8BIT()]
+map(RNG) := RandomRange(0,255);
+
+#-------------------------------------------------------------------------------
+#Used to determine PushBox of helpers
+[Function HelperInitSizePushBox(Ground_Back, Ground_Front, Height)]
+map(Helper_Size_Ground_Back) := $Ground_Back;
+map(Helper_Size_Ground_Front) := $Ground_Front;
+map(Helper_Size_Height) := $Height;
+
+#-------------------------------------------------------------------------------
+#Used to determine position of Head and Mid of helpers
+[Function HelperInitSizePos(Head_X, Head_Y, Mid_X, Mid_Y)]
+map(Helper_Size_Head_Pos_X) := $Head_X;
+map(Helper_Size_Head_Pos_Y) := $Head_Y;
+map(Helper_Size_Mid_Pos_X) := $Mid_X;
+map(Helper_Size_Mid_Pos_Y) := $Mid_Y;
+
+#-------------------------------------------------------------------------------
+#Used to spawn helpers
+[Function HelperEasy(ID, StateNo, PosX, PosY, Facing, OwnPal)]
+call RNG8BIT();
+
+if teamside = 1 || teamside = 0 && map(RNG) <= 127
+{
+	Helper{helpertype: normal;
+		name: "HELPER";
+		ID: $ID;
+		stateno: $StateNo;
+		pos: $PosX,$PosY;
+		postype: left;
+		facing: $Facing;
+		keyctrl: 0;
+		ownpal: $OwnPal;
+		size.ground.back: map(Helper_Size_Ground_Back);
+		size.ground.front: map(Helper_Size_Ground_Front);
+		size.height: map(Helper_Size_Height);
+		size.head.pos: map(Helper_Size_Head_Pos_X), map(Helper_Size_Head_Pos_Y);
+		size.mid.pos: map(Helper_Size_Mid_Pos_X), map(Helper_Size_Mid_Pos_Y);
+		size.shadowoffset: 0
+	}
+}
+
+if teamside = 2 || teamside = 0 && map(RNG) >= 128
+{
+	Helper{helpertype: normal;
+		name: "HELPER";
+		ID: $ID;
+		stateno: $StateNo;
+		pos: -$PosX,$PosY;
+		postype: right;
+		facing: -$Facing;
+		keyctrl: 0;
+		ownpal: 1;
+		size.ground.back: map(Helper_Size_Ground_Back);
+		size.ground.front: map(Helper_Size_Ground_Front);
+		size.height: map(Helper_Size_Height);
+		size.head.pos: map(Helper_Size_Head_Pos_X), map(Helper_Size_Head_Pos_Y);
+		size.mid.pos: map(Helper_Size_Mid_Pos_X), map(Helper_Size_Mid_Pos_Y);
+		size.shadowoffset: 0
+	}
+}
+
+map(Helper_Size_Ground_Back) := 0;
+map(Helper_Size_Ground_Front) := 0;
+map(Helper_Size_Height) := 0;
+map(Helper_Size_Head_Pos_X) := 0;
+map(Helper_Size_Head_Pos_Y) := 0;
+map(Helper_Size_Mid_Pos_X) := 0;
+map(Helper_Size_Mid_Pos_Y) := 0;
+
+#-------------------------------------------------------------------------------
+# Used to Spawn HitBox Helpers
+[Function HitBox(OwnPal)]
+Helper{helpertype: normal;
+	name: "HITBOX";
+	ID: 20000;
+	stateno: 20000;
+	pos: 0,0;
+	postype: p1;
+	facing: 1;
+	keyctrl: 0;
+	ownpal: $OwnPal;
+	size.ground.back: 0;
+	size.ground.front: 0;
+	size.height: 0;
+	size.head.pos: 0, 0;
+	size.mid.pos: 0, 0;
+	size.shadowoffset: 0
+}
+
+#-------------------------------------------------------------------------------
+# Used to determine if an Opponent's helper exists (Part 3)
+[Function CheckEnemyHelper()]
+
+if Enemy(Map(Target)),NumHelper
+{
+	Map(RandomHelperID) := Enemy(map(Target)),HelperIndex(Map(RandomHelper)),ID;
+}
+if !PlayerIDExist(Map(RandomHelperID))
+{
+	Map(RandomHelper) := Map(RandomHelper) + 1;
+	if Map(RandomHelper) > 56
+	{
+		Map(RandomHelper) := 0;
+		Map(PreviousTargetID) := 0;
+	}
+	Map(TargetID) := Max(Map(PreviousTargetID),Enemy(Map(Target)),ID);
+}
+else if PlayerIDExist(Map(RandomHelperID))
+{
+	Map(TargetID) := Map(RandomHelperID);
+	Map(PreviousTargetID) := Map(RandomHelperID);
+}
+
+#-------------------------------------------------------------------------------
+# Used to grab an Opponent's helper (Part 2)
+[Function GrabEnemyHelper()]
+
+if Enemy(Map(Target)),NumHelper
+{
+	Map(RandomHelper) := Map(RandomHelper) + 1;
+}
+
+#-------------------------------------------------------------------------------
+# Used to grab an Opponent (Part 1)
+[Function GrabEnemy()]
+
+if RoundState = 2
+{
+	Map(Target) := RandomRange(0,P2,TeamSize - (3 *(P2,TeamMode = Turns) ) - 1 );
+	Call GrabEnemyHelper();
+	Call CheckEnemyHelper();
+}
+
+#-------------------------------------------------------------------------------
+# Used to jumble targets at periodic times
+[Function JumbleTargetID(Ticks)]
+
+if GameTime % $Ticks = 0
+{
+	Call GrabEnemy();
+}
+
+#-------------------------------------------------------------------------------
+# Used to Determine ID, Anim and HitAnim of projectiles
+[Function ProjInitAnim(ID, Anim, HitAnim)]
+map(Projectile_ID) := $ID;
+map(Projectile_Anim) := $Anim;
+map(Projectile_HitAnim) := $HitAnim;
+
+#-------------------------------------------------------------------------------
+#Projectile Spawner
+[Function ProjectileSpawn(Damage, PosX, PosY, VelX, VelY, Priority)]
+PlaySND{value: s0, 1}
+Projectile{
+ProjID: map(Projectile_ID) ;
+projanim: map(Projectile_Anim) ;
+projhitanim: map(Projectile_HitAnim) ;
+projremove: 1 ;
+projremovetime: -1 ;
+velocity: $VelX,$VelY ;
+projpriority: 1 ;
+projsprpriority: 3 ;
+projedgebound: 320 ;
+projheightbound: -960, -8;
+offset: $PosX,$PosY ;
+postype: p1 ;
+projshadow: 0,0,0 ;
+attr: A,NP ;
+hitflag: MAFP ;
+guardflag: MA ;
+getpower: 0,0 ;
+givepower: 0,0 ;
+affectteam: E ;
+animtype: light ;
+air.animtype: light ;
+fall.animtype: Back ;
+priority: $Priority,Hit ;
+damage: $Damage,0 ;
+GuardPoints: ($Damage / 10) ;
+DizzyPoints: ($Damage / 10) ;
+Score: $Damage * !(Player(TeamLeader),AiLevel),0 ;
+pausetime: 0,2 ;
+guard.pausetime: 0,0 ;
+ground.hittime: 4 ;
+sparkno: -1 ;
+hitsound: s0,0 ;
+guardsound: s0,0 ;
+guard.dist: 8 ;
+ownpal: 1;
+hitonce: 1
+}
+map(Projectile_ID) := 0;
+map(Projectile_Anim) := 0;
+map(Projectile_HitAnim) := 0;
+
+# Used to grab an existing helper to latch on
+[Function CheckHelper()]
+if NumHelper && PlayerIDExist(HelperIndex(Map(RandomHelper)),ID)
+{
+	Map(RandomHelperID) := HelperIndex(Map(RandomHelper)),ID;
+}
+if !PlayerIDExist(Map(RandomHelperID)) || PlayerIDExist(Map(RandomHelperID)) && PlayerID(Map(RandomHelperID)),Map(HelperType) = 1 || !NumHelper
+{
+	Map(RandomHelper) := Map(RandomHelper) + 1;
+	if Map(RandomHelper) > 56
+	{
+		Map(RandomHelper) := 0;
+		Map(CurrentHelper) := 0;
+	}
+	if !NumHelper
+	{
+		Map(RandomHelper) := 0;
+		Map(CurrentHelper) := 0;
+	}
+}
+else if PlayerIDExist(Map(RandomHelperID)) && PlayerID(Map(RandomHelperID)),Map(HelperType) = 0
+{
+	Map(CurrentHelper) := Map(RandomHelperID);
+}

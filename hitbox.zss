@@ -1,0 +1,90 @@
+#HitBox Helper Spawn
+[StateDef 20000; MoveType: I; Physics: N;
+Ctrl: 0; VelSet: 0,0,0;]
+
+#BindToParent{time: -1; facing: 1; pos: 0,0}
+#map(Bind) := 1;
+parent,map(HitBoxID) := ID; #ID for the parent to know who is the hitbox
+map(DefaultStateNo) := 20001; #What State to go back after being hit
+Map(HelperType) := 1; #Helper is a hitbox
+
+switch Parent,StateNo
+{
+	case 10000; 10001; 10002; 10010:
+	IgnoreHitPause {
+		LifeSet{value: const(Soldier.BaseHealth) * (Parent,map(Multiplier) )}
+		RedLifeSet{value: const(Soldier.BaseHealth) * (Parent,map(Multiplier) )}
+		map(DefaultAnim) := 20000;
+		map(DeathStateNo) := 10010;
+	}
+}
+
+ChangeState{value: map(DefaultStateNo); Anim: map(DefaultAnim)}
+
+#HitBox Helper Main State
+[StateDef 20001;
+MoveType: I; Ctrl: 0; VelSet: 0,0,0;]
+
+if Parent,StateType = S && StateType != S
+{
+	StateTypeSet{statetype: S}
+}
+else if Parent,StateType = C && StateType != C
+{
+	StateTypeSet{statetype: C}
+}
+else if Parent,StateType = A && StateType != A
+{
+	StateTypeSet{statetype: A}
+}
+
+[StateDef +1]
+
+IgnoreHitPause if IsHelper && Map(HelperType) = 1
+{
+	DisplayToClipBoard{text: "default anim: %v parent id: %v life: %v red life: %v"; params: map(DefaultAnim), Parent,ID, Life, RedLife}
+	AssertSpecial{flag: Invisible}
+	if Anim != map(DefaultAnim) + (StateType = C)
+	{
+		ChangeAnim{value: map(DefaultAnim) + (StateType = C)}
+	}
+}
+
+[StateDef -4]
+
+IgnoreHitPause if IsHelper && Map(HelperType) = 1
+{
+	if InCustomState && map(Bind)
+	{
+		map(Bind) := 0;
+	}
+	if Life <= 0 && !InCustomState
+	{
+		ChangeState{value: map(DeathStateNo); RedirectID: Parent,ID}
+	}
+	if Life <= 0 && !InCustomState
+	{
+		DestroySelf{}
+	}
+	if !InCustomState || InCustomState && Time >= 2000
+	{
+		if !map(Bind)
+		{
+			BindToParent{time: -1; facing: 1; pos: 0,0}
+			map(Bind) := 1;
+		}
+		if StateNo != map(DefaultStateNo) && Time
+		{
+			SelfState{value: map(DefaultStateNo)}
+		}
+		if Life < RedLife && StateNo = map(DefaultStateNo)
+		{
+			if RedLife - Life > 200 && GameTime % 2 = 0 || RedLife - Life > 150 && GameTime % 15 = 0
+			|| RedLife - Life > 100 && GameTime % 30 = 0 || RedLife - Life > 50 && GameTime % 45 = 0
+			|| RedLife - Life = [1,50] && GameTime % 60 = 0
+			{
+				LifeAdd{value: 1; absolute: 1}
+			}
+		}
+	}
+}

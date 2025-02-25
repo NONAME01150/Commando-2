@@ -1,0 +1,439 @@
+#ZSS language: https://github.com/ikemen-engine/Ikemen-GO/wiki/ZSS
+#ZSS syntax highlighter for Notepad++: https://github.com/ikemen-engine/zss_npp
+#-------------------------------------------------------------------------------
+#Commenting in ZSS
+#You may notice that the ";" character is now replaced with the "#" character.
+#This is because ";" is now used to separate parameters in sctrls rather than a
+#blank space.
+
+#===============================================================================
+# Functions
+#===============================================================================
+#Used to avoid repeating change state code to reference returning to state 0 or
+#11 if crouching. $type is used to specify if it's standing or crouching.
+#1 - crouching
+#0 - standing
+[Function EndState(type)]
+if animTime = 0 {
+	changeState{value: 11 * $type; ctrl: roundState > 1}
+}
+
+#-------------------------------------------------------------------------------
+#Used to call system sounds from the screenpack
+[Function SysSnd(b, s, c)]
+playSnd{value: F $b, $s; channel: $c}
+
+#-------------------------------------------------------------------------------
+#Used to call sounds coming from this character
+[Function CSnd(bank, sound, c)]
+playSnd{value: S $bank, $sound; channel: $c}
+
+#-------------------------------------------------------------------------------
+#Used to apply palFx during EX moves
+[Function EXFX(time)]
+palFx{time: $time; add: 32, 16, 0; sinadd: 64, 32, 5, 3}
+
+#===============================================================================
+# Functions End
+#===============================================================================
+
+#Stand Override
+[StateDef 0; ctrl: 0; type: S; physics: N; anim: -2;]
+
+if !ctrl && RoundState >= 2
+{
+	CtrlSet{value: 1}
+}
+
+if !alive {
+	changeState{value: 5050; ctrl: 0}
+}
+
+if !NumHelper
+{
+	if Command = "holdfwd"
+	{
+		PosAdd{X: 1}
+	}
+	if Command = "holdback"
+	{
+		PosAdd{X: -1}
+	}
+	if Command = "holdup"
+	{
+		PosAdd{Y: -1}
+	}
+	if Command = "holddown"
+	{
+		PosAdd{Y: 1}
+	}
+}
+
+#===============================================================================
+# Lose by Time Over
+#===============================================================================
+# ZSS difficulty: basic
+#This is how statedefs are defined in ZSS. It must always end with a ";" or it
+#will result in a crash. 
+[StateDef 170;
+type: S; movetype: I; physics: S;
+anim: 170; ctrl: 0; velset: 0, 0;
+sprpriority: 1;]
+
+#If you used a trigger that normally read "trigger1 = 1" you can just declare
+#the sctrl with no condition like below.
+notHitBy{value: SCA; time: 1}
+
+#===============================================================================
+# Win state decider
+#===============================================================================
+# ZSS difficulty: basic
+[StateDef 180;
+type: S; movetype: I; physics: S;
+anim: -2; ctrl: 0; velset: 0, 0;
+sprpriority: 1;]
+
+#changeState{value: 181; ctrl: 0}
+
+#===============================================================================
+# win pose 1 - Bow
+#===============================================================================
+# ZSS difficulty: basic
+[StateDef 181;
+type: S; movetype: I; physics: S;
+anim: 181; ctrl: 0; velset: 0, 0;
+sprpriority: 1;]
+
+#trigger is replaced with a simple "if". All conditions can be handled the same
+#with multiple if blocks. Optional Assert roundnotover
+if animTime < -2 {
+	assertSpecial{flag: roundnotover}
+}
+
+notHitBy{value: SCA; time: 1}
+
+#-------------------------------------------------------------------------------
+# Initialize (at the start of the round)
+[StateDef 5900; type: S;]
+
+if roundsExisted = 0 {
+	varRangeSet{value: 0}
+	varRangeSet{fvalue: 0}
+}
+map(Difficulty) := 1 + (Player(TeamLeader),AiLevel > 2) + (Player(TeamLeader),AiLevel > 5) + (Player(TeamLeader),AiLevel > 7);
+map(SoldierQuantity) := (Const(Soldier.Quantity) * map(Difficulty)) * Cond(Enemy,decisiveRound, 2, 1);
+map(SoldierLimit) := Const(Soldier.Limit) * map(Difficulty);
+changeState{value: 0}
+
+#===============================================================================
+# Africa Corps Soldier
+#===============================================================================
+# Stand
+[StateDef 10000; type: S; MoveType: I;
+physics: N;]
+
+if map(Opponent_1_Pos_X_Distance) < 0 {Turn{}}
+
+if PrevStateNo != [10000,10003] && !Time
+{
+	map(ReactionTime) := 144 - 18 * (Player(TeamLeader),AiLevel - 1);
+	map(Difficulty) := 0 + (Player(TeamLeader),AiLevel > 2) + (Player(TeamLeader),AiLevel > 5) + (Player(TeamLeader),AiLevel > 7);
+	map(DeathStateNo) := 10010;
+	switch map(Difficulty)
+	{
+		case 3:
+			map(Multiplier) := const(Multiplier.SuperHard);
+		case 2:
+			map(Multiplier) := const(Multiplier.Hard);
+		case 1:
+			map(Multiplier) := const(Multiplier.Normal);
+		default:
+			map(Multiplier) := const(Multiplier.Easy);
+	}
+	if !Time && !PlayerIDExist(map(HitBoxID))
+	{
+		call HitBox(0);
+	}
+}
+VelSet{x: 0}
+
+# If Anim isn't the same as constant then set it to the constant
+# First bit of flags is crouch check
+if Anim != const(AnimSoldierStand) && !(Map(Flags) & 1)
+{
+	ChangeAnim{value: const(AnimSoldierStand)}
+	StateTypeSet{statetype: S}
+}
+
+if Anim != const(AnimSoldierCrouch) && (Map(Flags) & 1)
+{
+	ChangeAnim{value: const(AnimSoldierCrouch)}
+	StateTypeSet{statetype: C}
+}
+
+# Go to Crouch
+if time % 30 = 0 && RoundState = 2
+{
+	call RNG8BIT();
+	if map(RNG) < 128 && !(Map(Flags) & 1) && !PlayerID(map(HitBoxID)),InCustomState
+	{
+		Map(Flags) := Map(Flags) + 1;
+	}
+	if map(RNG) >= 128 && (Map(Flags) & 1) && !PlayerID(map(HitBoxID)),InCustomState
+	{
+		Map(Flags) := Map(Flags) - 1;
+	}
+}
+
+# Go to Walking State
+if !map(TooClose) && map(Opponent_1_Pos_X_Distance) > min(140,75 + 60 * min(2,map(Difficulty))) && time && !PlayerID(map(HitBoxID)),InCustomState
+{
+	VelSet{x: 0.75 + 0.25 *(map(Difficulty) = 3) }
+	ChangeState{value: 10001}
+}
+else if map(TooClose) && map(Opponent_1_Pos_X_Distance) + PlayerID(Map(TargetID)),Const(size.ground.front) < 45 + 30 * map(Difficulty) && time && !PlayerID(map(HitBoxID)),InCustomState
+{
+	VelSet{x: -0.75 - 0.25 *(map(Difficulty) = 3) }
+	ChangeState{value: 10001}
+}
+
+# Go to Missile State
+if map(ReactionTime) <= 0 && !map(TooClose)
+{
+	ChangeState{value: 10002}
+}
+
+# Walk
+[StateDef 10001; type: S; MoveType: I;
+physics: N;]
+
+if map(Opponent_1_Pos_X_Distance) < 0 {Turn{}}
+
+# Go to Crouch
+if time % 30 = 0
+{
+	call RNG8BIT();
+	if map(RNG) < 128 && !(Map(Flags) & 1) && !PlayerID(map(HitBoxID)),InCustomState
+	{
+		Map(Flags) := Map(Flags) + 1;
+	}
+	if map(RNG) >= 128 && (Map(Flags) & 1) && !PlayerID(map(HitBoxID)),InCustomState
+	{
+		Map(Flags) := Map(Flags) - 1;
+	}
+}
+
+if Anim != const(AnimSoldierWalk) && !(Map(Flags) & 1) && !Map(TooClose) # First bit of flags is crouch check
+{
+	ChangeAnim{value: const(AnimSoldierWalk)}
+	StateTypeSet{statetype: S}
+}
+else if Anim != const(AnimSoldierWalkBack) && !(Map(Flags) & 1) && Map(TooClose)
+{
+	ChangeAnim{value: const(AnimSoldierWalkBack)}
+	StateTypeSet{statetype: S}
+}
+
+if Anim != const(AnimSoldierCrouchWalk) && (Map(Flags) & 1)
+{
+	ChangeAnim{value: const(AnimSoldierCrouchWalk)}
+	StateTypeSet{statetype: C}
+}
+
+if !map(TooClose) && map(Opponent_1_Pos_X_Distance) <= min(140,75 + 60 * min(2,map(Difficulty))) && time || map(TooClose) && map(Opponent_1_Pos_X_Distance) + PlayerID(Map(TargetID)),Const(size.ground.front) > 45 + 30 * map(Difficulty) && time || PlayerID(map(HitBoxID)),InCustomState || map(ReactionTime) <= 0
+{
+VelSet{x: 0}
+map(TooClose) := 0;
+ChangeState{value: 10000}
+}
+
+# Missile
+[StateDef 10002; MoveType: A; velset: 0,0,0;]
+
+if !Time #Anim != const(AnimSoldierMissile)
+{
+	map(XDistance) := (PlayerID(Map(TargetID)),pos x - pos x) * facing; # Credits to RicePigeon's Code Snippet "Aimed Projectiles"
+	map(YDistance) := PlayerID(Map(TargetID)),pos y - pos y + PlayerID(Map(TargetID)),const(size.mid.pos.y);
+	map(Aim) := ((map(XDistance)**2.0)+(map(YDistance)**2.0))**0.5;
+	map(AimAngle) := atan((1*map(YDistance)/map(Aim)) * map(Multiplier)/abs(1*map(XDistance)/map(Aim)) * map(Multiplier))*(-180.0/pi)+((abs(1*map(XDistance)/map(Aim)) * map(Multiplier)<0)*180);
+	if abs(1*map(XDistance)/map(Aim)) * map(Multiplier) = 0
+	{
+		Map(AimAngle) := ifelse(vel y<0,90,-90);
+	}
+	if Ceil(Map(AimAngle)) >= 45 && Ceil(Map(AimAngle)) < 65
+	{
+		ChangeAnim{value: const(AnimSoldierMissile45)}
+	}
+	else
+	{
+		ChangeAnim{value: const(AnimSoldierMissile)}
+	}
+	StateTypeSet{statetype: S}
+	if map(Opponent_1_Pos_X_Distance) < 0 {Turn{}}
+}
+
+#if !PlayerIDExist(Map(TargetID)) && AnimElemTime(3) = AnimElemLength - 1
+#{
+#	ChangeAnim{value: Anim; Elem: 8}
+#}
+
+if Time = 14 #AnimElemTime(4) = 0
+{
+	if Anim = Const(AnimSoldierMissile)
+	{
+		let XDistance = (PlayerID(Map(TargetID)),pos x - pos x + 35) * facing;
+		let YDistance = PlayerID(Map(TargetID)),pos y - pos y + PlayerID(Map(TargetID)),const(size.mid.pos.y) + 22;
+		let Aim = (($XDistance**2.0)+($YDistance**2.0))**0.5;
+		Explod{Anim: 15000; Pos: 40, -22; PosType: p1; Bindtime: 1; pausemovetime: 1; sprpriority: 0; ownpal: 1; RemoveOnChangeState: 1}
+		Call ProjInitAnim(15000, 15001, 15002);
+		Call ProjectileSpawn(10 * map(Multiplier), 35, -22, abs(1*$XDistance/$Aim) * map(Multiplier), (1*$YDistance/$Aim) * map(Multiplier), 1 * map(Multiplier)); # RandomRange(-1, 1) / map(Multiplier)
+	}
+	if Anim = Const(AnimSoldierMissile45)
+	{
+		let XDistance = (PlayerID(Map(TargetID)),pos x - pos x + 33) * facing;
+		let YDistance = PlayerID(Map(TargetID)),pos y - pos y + PlayerID(Map(TargetID)),const(size.mid.pos.y) + 34;
+		let Aim = (($XDistance**2.0)+($YDistance**2.0))**0.5;
+		Explod{Anim: 15000; Pos: 38, -34; PosType: p1; Bindtime: 1; pausemovetime: 1; sprpriority: 0; angle: 45; ownpal: 1; RemoveOnChangeState: 1}
+		Call ProjInitAnim(15000, 15001, 15002);
+		Call ProjectileSpawn(10 * map(Multiplier), 33, -34, abs(1*$XDistance/$Aim) * map(Multiplier), (1*$YDistance/$Aim) * map(Multiplier), 1 * map(Multiplier)); # RandomRange(-1, 1) / map(Multiplier)
+	}
+}
+
+if !AnimTime
+{
+	map(ReactionTime) := 144 + RandomRange(-144 + 18 * (Player(TeamLeader),AiLevel - 1),60) - 18 *(Player(TeamLeader),AiLevel - 1);
+	ChangeState{value: 10000}
+}
+
+#Special
+[StateDef 10003; MoveType: A; velset: 0,0,0;]
+
+if !Time
+{
+	ChangeAnim{value: const(AnimSoldierSpecial)}
+	StateTypeSet{statetype: S}
+	if map(Opponent_1_Pos_X_Distance) < 0 {Turn{}}
+}
+
+if Time = 20 # Grenade Throw Frame
+{
+	
+}
+
+if !AnimTime
+{
+	map(ReactionTime) := 144 - 18 *(Player(TeamLeader),AiLevel - 1);
+	ChangeState{value: 10000}
+}
+
+# Death
+[StateDef 10010; MoveType: I; VelSet: 0,0,0;]
+
+if !Time
+{
+	Call CSnd(11, RandomRange(0,2), 0);
+	ChangeAnim{value: const(AnimSoldierDeath)}
+}
+if !AnimTime
+{
+	Root,map(SoldierQuantity) := Root,map(SoldierQuantity) - 1;
+	Root,map(CurrentHelper) := 0;
+	DestroySelf{}
+}
+
+#===============================================================================
+# Override common states (use same number to override):
+#===============================================================================
+
+
+#===============================================================================
+# States that are always executed (use StateDef -2)
+#===============================================================================
+[StateDef -2]
+
+
+#===============================================================================
+# States that are executed when in self's state file (use StateDef -3)
+#===============================================================================
+[StateDef -3]
+displayToClipboard{text: "Quantity: %v"; params: map(SoldierQuantity)}
+
+[StateDef -4]
+
+# Checking Distance of Opponents
+map(Opponent_1_Pos_X_Distance) := (Floor(PlayerID(Map(TargetID)),Pos X + PlayerID(Map(TargetID)),Vel X) - Floor(Pos X + Vel X) ) * Facing;
+
+# Only used by the char
+ignorehitpause if !IsHelper
+{
+	assertspecial{flag: NoHardcodedKeys; flag2: invisible; flag3: noshadow}
+	assertspecial{flag: NoKoSlow; flag2: NoKoSND}
+	map(HelperCall) := map(HelperCall) - RandomRange(1,AiLevel);
+
+	if RoundState = 2 && NumHelper(Const(Soldier.ID)) < Cond(map(SoldierQuantity) < map(SoldierLimit), map(SoldierQuantity), map(SoldierLimit) ) && (command = "x" || AiLevel && map(HelperCall) <= 0 )
+	{
+		#call HelperInitSizePushBox(8, 16, 53);
+		call HelperInitSizePos(7, -31, 4, -20);
+		call HelperEasy(Const(Soldier.ID), 10000, -30, 0, 1, 1);
+		map(HelperCall) := cond(AiLevel <= 4 || AiLevel = 8, 144, 288);
+	}
+	if RoundState = 2 && Alive && map(SoldierQuantity) <= 0
+	{
+		LifeSet{value: 0}
+	}
+	if RoundState = 2 && (Alive || Life)
+	{
+		if NumHelper
+		{
+			Call CheckHelper();
+			PosSet{x: PlayerID(Map(CurrentHelper)),Pos X + PlayerID(Map(CurrentHelper)),Vel X; y: Min(0, PlayerID(Map(CurrentHelper)),Pos Y + PlayerID(Map(CurrentHelper)),Vel Y)}
+		}
+		ChangeAnim{Value: -2 * !Map(Indicator)}
+	}
+	NotHitBy{value: SCA; Time: 1}
+	HitOverRide{attr: SCA,AA,AP,AT; Time: 1}
+}
+
+# Only used by Normal helpers and not hitbox ones
+ignorehitpause if IsHelper && Map(HelperType) = 0 #Helper Type Map means 0 = Normal, 1 = HitBox
+{
+	PlayerPush{value: 1} #Needs to be kept active to work
+	displayToClipboard{text: "RNG: %0.0f Flags: %0.0f ReactionTime: %v Target ID: %v Target Pos X: %v\nToo Close: %v Aim Angle: %v BackEdgeBodyDist: %v"; params: map(RNG), map(Flags), map(ReactionTime), Map(TargetID), map(Opponent_1_Pos_X_Distance), Map(TooClose), map(AimAngle), BackEdgeBodyDist}
+	if !PlayerIDExist(Map(TargetID)) || PlayerIDExist(Map(TargetID)) && PlayerID(Map(TargetID)),Life <= 0
+	{
+		Call GrabEnemy();
+	}
+	if PlayerIDExist(Map(TargetID))
+	{
+		if Player(TeamLeader),AiLevel
+		{
+			Call JumbleTargetID(18 *(Player(TeamLeader),AiLevel));
+		}
+		else
+		{
+			Call JumbleTargetID(72);
+		}
+	}
+	if RoundState = 2 && map(ReactionTime) && MoveType != A && PlayerIDExist(Map(TargetID)) && (PlayerIDExist(map(HitBoxID)) && PlayerID(map(HitBoxID)),InCustomState = 0) #Map(MainState)
+	{
+		map(ReactionTime) := map(ReactionTime) - 1;
+		Map(TooClose) := Map(TooClose) + Cond(map(Opponent_1_Pos_X_Distance) + PlayerID(Map(TargetID)),Const(size.ground.front) < 45 + 30 * map(Difficulty) && BackEdgeBodyDist > 0,1,-Map(TooClose));
+	}
+	if PlayerIDExist(map(HitBoxID)) && PlayerID(map(HitBoxID)),InCustomState # Have the Helper follow it's hitbox along
+	{
+		PosSet{x: PlayerID(map(HitBoxID)),Pos X + PlayerID(map(HitBoxID)),Vel X; y: Min(0, PlayerID(map(HitBoxID)),Pos Y + PlayerID(map(HitBoxID)),Vel Y)}
+		AssertSpecial{flag: AnimFreeze}
+	}
+	if (PlayerIDExist(map(HitBoxID)) && PlayerID(map(HitBoxID)),InCustomState = 0 || StateNo = map(DeathStateNo)) && Pos Y != 0
+	{
+		PosAdd{Y: Min(6,-Pos Y)}
+	}
+	if !PlayerIDExist(map(HitBoxID)) && StateNo != map(DeathStateNo) && Time > 1
+	{
+		ChangeState{value: map(DeathStateNo)}
+	}
+	if Map(TooClose) >= 820
+	{
+		Map(TooClose) := 0;
+	}
+}
